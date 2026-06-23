@@ -249,7 +249,8 @@ export class PackOpeningScreen {
             // Auto-advance after a rarity-scaled pause
             const pause = card.rarity === 'legendary' ? 1600
               : card.rarity === 'epic' ? 1300
-              : card.rarity === 'rare' ? 1000 : 800;
+              : card.rarity === 'rare' ? 1000
+              : 533; // common/uncommon: 800ms ÷ 1.5
             setTimeout(() => this.exitCard(), pause);
           });
         });

@@ -10,8 +10,8 @@ interface FlipConfig {
 }
 
 const RARITY_TIMING: Record<Rarity, FlipConfig> = {
-  common:    { liftDuration: 0.25, flipDuration: 0.40, settleDuration: 0.20 },
-  uncommon:  { liftDuration: 0.30, flipDuration: 0.45, settleDuration: 0.20 },
+  common:    { liftDuration: 0.17, flipDuration: 0.27, settleDuration: 0.13 },
+  uncommon:  { liftDuration: 0.20, flipDuration: 0.30, settleDuration: 0.13 },
   rare:      { liftDuration: 0.40, flipDuration: 0.55, settleDuration: 0.25 },
   epic:      { liftDuration: 0.50, flipDuration: 0.65, settleDuration: 0.30 },
   legendary: { liftDuration: 0.80, flipDuration: 0.80, settleDuration: 0.40 },

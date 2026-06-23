@@ -174,11 +174,32 @@ export class LobbyScreen {
     AssetLoader.loadPackImage().then(tex => {
       if (!tex) return;
       this.packArtLayer.removeChildren();
+
+      const scale = Math.min(240 / tex.width, 360 / tex.height);
+      const sw = tex.width * scale;
+      const sh = tex.height * scale;
+      const rx = 18;
+      const sdOff = 10; // shadow offset toward lower-right
+
+      // Layered soft shadow offset to lower-right
+      for (let i = 2; i >= 0; i--) {
+        const off = sdOff + i * 4;
+        const shadow = new Graphics();
+        shadow.roundRect(-sw / 2 + off, -sh / 2 + off, sw, sh, rx)
+          .fill({ color: 0x000000, alpha: 0.18 - i * 0.04 });
+        this.packArtLayer.addChild(shadow);
+      }
+
       const sprite = new Sprite(tex);
       sprite.anchor.set(0.5);
-      const scale = Math.min(240 / tex.width, 360 / tex.height);
       sprite.scale.set(scale);
       this.packArtLayer.addChild(sprite);
+
+      // Rounded-rectangle mask clipping the sprite
+      const mask = new Graphics();
+      mask.roundRect(-sw / 2, -sh / 2, sw, sh, rx).fill(0xffffff);
+      this.packArtLayer.addChild(mask);
+      sprite.mask = mask;
     });
   }
 
