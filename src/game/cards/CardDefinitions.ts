@@ -14,26 +14,25 @@ export interface CardDef {
 // ---------------------------------------------------------------------------
 // RTP Model  (total weight = 10 000)
 //
-// Design constraints:
-//   • Every rare  payout > $5.00  (> 1× pack price)
-//   • Every epic  payout > $10.00 (> 2× pack price)
+// Tier payout constraints:
+//   • Common    $0.08 – $0.35   (max < uncommon min)
+//   • Uncommon  $0.40 – $1.00   (min > common max,  max < rare min $1.50)
+//   • Rare      $1.50 – $4.80   (min > uncommon max, max < 1× pack price $5.00)
+//   • Epic      $5.20 – $9.80   (min > rare max,    range: 1× – 2× pack price)
+//   • Legendary $11.00 – $50.00 (min > epic max,    min > 2× pack price $10.00)
+//   • No higher-rarity card can have a lower payout than any lower-rarity card.
 //
-// To honour those floors while keeping 95% RTP, drop rates are reduced:
-//   Rare  3.5% (was 10%)  — rarer, but always meaningful
-//   Epic  1.5% (was  4%)  — rarer, but always significant
+// EV = Σ (weight/10000 × payout)
 //
-// Expected value per card slot:
-//   EV = Σ (weight/10000 × payout)
-//
-//   Common    7000  →  EV ≈ $0.083
+//   Common    6800  →  EV ≈ $0.080
 //   Uncommon  2400  →  EV ≈ $0.117
-//   Rare       350  →  EV ≈ $0.298   (min payout $6)
-//   Epic       150  →  EV ≈ $0.252   (min payout $12)
-//   Legendary  100  →  EV ≈ $0.202
-//                       ──────────
-//   Total EV per card  ≈ $0.952
+//   Rare       350  →  EV ≈ $0.079
+//   Epic       150  →  EV ≈ $0.092
+//   Legendary  300  →  EV ≈ $0.582   (3× weight vs before — higher legend rate
+//                       ──────────    offsets capped rare/epic ceilings)
+//   Total EV per card  ≈ $0.950
 //
-// Per pack (5 cards) EV = $4.76  →  RTP = 4.76 / 5.00 ≈ 95.2%
+// Per pack (5 cards) EV = $4.75  →  RTP = 4.75 / 5.00 ≈ 95%
 // ---------------------------------------------------------------------------
 
 export const CARD_DEFINITIONS: CardDef[] = [
@@ -43,7 +42,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     name: 'Desert Scarab',
     rarity: 'common',
     payout: 0.08,
-    weight: 2500,
+    weight: 2300,
     glowColor: 0x888888,
     description: 'A tiny scarab carved from desert stone.',
     artworkDesc: 'Small stone scarab beetle on sandy ground, hieroglyphics border',
@@ -92,7 +91,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'anubis_fragment',
     name: 'Anubis Fragment',
     rarity: 'common',
-    payout: 0.40,
+    payout: 0.35,
     weight: 200,
     glowColor: 0x888888,
     description: 'A shard from an Anubis statue.',
@@ -151,12 +150,12 @@ export const CARD_DEFINITIONS: CardDef[] = [
     artworkDesc: 'Lapis lazuli falcon figurine with golden crown',
   },
 
-  // ── RARE (total weight 350, EV ≈ $0.298) — every card > 1× pack price ────
+  // ── RARE (total weight 350, EV ≈ $0.079) — $1.50–$4.80, below pack price ──
   {
     id: 'anubis_blessing',
     name: 'Anubis Blessing',
     rarity: 'rare',
-    payout: 6.00,
+    payout: 1.50,
     weight: 150,
     glowColor: 0x0088ff,
     description: 'A blessing granted by Anubis, guide of souls.',
@@ -166,7 +165,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'pharaohs_treasure',
     name: "Pharaoh's Treasure",
     rarity: 'rare',
-    payout: 8.00,
+    payout: 2.20,
     weight: 100,
     glowColor: 0x0088ff,
     description: 'Riches from the royal treasury.',
@@ -176,7 +175,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'cleopatras_jewel',
     name: "Cleopatra's Jewel",
     rarity: 'rare',
-    payout: 10.00,
+    payout: 3.00,
     weight: 60,
     glowColor: 0x0088ff,
     description: 'A sapphire worn by the last pharaoh.',
@@ -186,7 +185,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'golden_obelisk',
     name: 'Golden Obelisk',
     rarity: 'rare',
-    payout: 15.00,
+    payout: 3.80,
     weight: 25,
     glowColor: 0x0088ff,
     description: 'A miniature obelisk cast in solid gold.',
@@ -196,19 +195,19 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'tomb_of_kings',
     name: 'Tomb of Kings',
     rarity: 'rare',
-    payout: 20.00,
+    payout: 4.80,
     weight: 15,
     glowColor: 0x0088ff,
     description: 'Access to the Valley of the Kings.',
     artworkDesc: 'Grand tomb entrance cut into cliff face, royal cartouches carved above',
   },
 
-  // ── EPIC (total weight 150, EV ≈ $0.252) — every card > 2× pack price ────
+  // ── EPIC (total weight 150, EV ≈ $0.092) — $5.20–$9.80, 1×–2× pack price ─
   {
     id: 'wrath_of_ra',
     name: 'Wrath of Ra',
     rarity: 'epic',
-    payout: 12.00,
+    payout: 5.20,
     weight: 80,
     glowColor: 0xaa00ff,
     description: 'The sun god unleashes his fury upon the unworthy.',
@@ -218,7 +217,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'crown_of_eternity',
     name: 'Crown of Eternity',
     rarity: 'epic',
-    payout: 18.00,
+    payout: 6.50,
     weight: 45,
     glowColor: 0xaa00ff,
     description: 'A crown that grants immortal rule.',
@@ -228,7 +227,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'eternal_pyramid',
     name: 'Eternal Pyramid',
     rarity: 'epic',
-    payout: 25.00,
+    payout: 8.00,
     weight: 20,
     glowColor: 0xaa00ff,
     description: 'The eternal monument of a thousand years.',
@@ -238,20 +237,20 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'scepter_of_osiris',
     name: 'Scepter of Osiris',
     rarity: 'epic',
-    payout: 50.00,
+    payout: 9.80,
     weight: 5,
     glowColor: 0xaa00ff,
     description: 'The was-scepter wielded by Osiris, lord of the afterlife.',
     artworkDesc: 'Green-skinned Osiris holding crook and flail, underworld throne room',
   },
 
-  // ── LEGENDARY (total weight 100, EV ≈ $0.202) ────────────────────────────
+  // ── LEGENDARY (total weight 300, EV ≈ $0.582) — all > 2× pack price $10 ──
   {
     id: 'book_of_the_dead',
     name: 'Book of the Dead',
     rarity: 'legendary',
-    payout: 12.00,
-    weight: 50,
+    payout: 11.00,
+    weight: 150,
     glowColor: 0xffaa00,
     description: 'The sacred spells that guide souls through the afterlife.',
     artworkDesc: 'Ancient papyrus scroll glowing with golden hieroglyphics, Anubis watching',
@@ -260,8 +259,8 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'heart_of_ra',
     name: 'Heart of Ra',
     rarity: 'legendary',
-    payout: 20.00,
-    weight: 30,
+    payout: 18.00,
+    weight: 90,
     glowColor: 0xffaa00,
     description: 'The beating heart of the sun god himself.',
     artworkDesc: 'Pulsating golden heart radiating solar energy, all creation around it',
@@ -270,8 +269,8 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'treasure_of_tutankhamun',
     name: 'Treasure of Tutankhamun',
     rarity: 'legendary',
-    payout: 28.00,
-    weight: 15,
+    payout: 40.00,
+    weight: 45,
     glowColor: 0xffaa00,
     description: 'The legendary burial wealth of the boy-king.',
     artworkDesc: 'Golden death mask of Tutankhamun surrounded by mountains of treasure',
@@ -280,8 +279,8 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'divine_throne',
     name: 'Divine Throne',
     rarity: 'legendary',
-    payout: 80.00,
-    weight: 5,
+    payout: 50.00,
+    weight: 15,
     glowColor: 0xffaa00,
     description: 'The throne of the gods — sit upon it and rule eternity.',
     artworkDesc: 'Celestial throne of gold and lapis lazuli suspended among the stars',
