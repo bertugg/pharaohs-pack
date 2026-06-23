@@ -6,6 +6,7 @@ class AudioManagerClass {
   private ctx: AudioContext | null = null;
   private masterGain!: GainNode;
   private muted = false;
+  private musicSource: AudioBufferSourceNode | null = null;
 
   init(): void {
     this.ctx = new AudioContext();
@@ -45,6 +46,31 @@ class AudioManagerClass {
       legendary: 'legend_sting',
     };
     this.play(map[rarity]);
+  }
+
+  /** Loads /music_default.mp3 and plays it in a loop. Silent no-op if file is missing. */
+  async startMusic(): Promise<void> {
+    if (this.musicSource || !this.ctx) return;
+    this.resume();
+    const url = '/music_default.mp3';
+    try {
+      const probe = await fetch(url, { method: 'HEAD' });
+      if (!probe.ok) return;
+      const res = await fetch(url);
+      const raw = await res.arrayBuffer();
+      const decoded = await this.ctx.decodeAudioData(raw);
+      const src = this.ctx.createBufferSource();
+      src.buffer = decoded;
+      src.loop = true;
+      const gain = this.ctx.createGain();
+      gain.gain.value = 0.25;
+      src.connect(gain);
+      gain.connect(this.masterGain);
+      src.start();
+      this.musicSource = src;
+    } catch {
+      // File missing or unsupported format — proceed without music
+    }
   }
 
   setMuted(v: boolean): void { this.muted = v; }

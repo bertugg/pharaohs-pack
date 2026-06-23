@@ -33,6 +33,24 @@ class AssetLoaderClass {
   loadCardArt(id: string): Promise<Texture | null>  { return this.loadFromCards(id); }
   loadCardBack(): Promise<Texture | null>             { return this.loadFromCards('card_back'); }
   loadPackImage(): Promise<Texture | null>            { return this.loadFromCards('pack_image'); }
+
+  /** Loads an image from the public root (e.g. /background_pack.jpg). Returns null if missing. */
+  async loadBackground(name: string): Promise<Texture | null> {
+    const key = `bg:${name}`;
+    if (this.cache.has(key)) return this.cache.get(key)!;
+    for (const ext of EXTS) {
+      const url = `/${name}.${ext}`;
+      if (await probeExists(url)) {
+        try {
+          const tex = await Assets.load<Texture>(url);
+          this.cache.set(key, tex);
+          return tex;
+        } catch { /* try next ext */ }
+      }
+    }
+    this.cache.set(key, null);
+    return null;
+  }
 }
 
 export const AssetLoader = new AssetLoaderClass();

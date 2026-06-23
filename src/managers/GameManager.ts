@@ -1,10 +1,11 @@
-import { Application, Container, Graphics, Ticker } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Ticker } from 'pixi.js';
 import { EconomyManager } from '../game/economy/EconomyManager';
 import { PackGenerator } from '../game/packSystem/PackGenerator';
 import { LobbyScreen } from '../ui/LobbyScreen';
 import { PackOpeningScreen } from '../ui/PackOpeningScreen';
 import { ResultScreen } from '../ui/ResultScreen';
 import { AudioManager } from './AudioManager';
+import { AssetLoader } from './AssetLoader';
 import { EventBus } from './EventBus';
 import type { Pack } from '../game/packSystem/PackGenerator';
 
@@ -21,6 +22,9 @@ export class GameManager {
   private currentPack: Pack | null = null;
   private root!: Container;
   private bgTicker!: Ticker;
+  private bgLayer!: Container;
+  private bgPackSprite: Sprite | null = null;
+  private bgRevealSprite: Sprite | null = null;
 
   constructor(app: Application) {
     this.app = app;
@@ -37,8 +41,12 @@ export class GameManager {
     this.root.y = this.app.screen.height / 2;
     this.app.stage.addChild(this.root);
 
-    // Full-screen background
+    // Full-screen background (procedural fallback)
     this.buildBackground();
+
+    // Global bg image layer — first child of root, behind all screens
+    this.bgLayer = new Container();
+    this.root.addChild(this.bgLayer);
 
     // Screens
     this.lobby   = new LobbyScreen(this.economy);
@@ -48,6 +56,9 @@ export class GameManager {
     this.root.addChild(this.lobby.container);
     this.root.addChild(this.opening.container);
     this.root.addChild(this.results.container);
+
+    // Load optional background images async — graceful if absent
+    this.loadBackgrounds();
 
     this.opening.hide();
     this.results.hide();
@@ -110,6 +121,7 @@ export class GameManager {
 
   private async handleBuyPack(): Promise<void> {
     if (!this.economy.canAffordPack()) return;
+    AudioManager.startMusic(); // start looping music on first user gesture
     this.economy.buyPack();
     const pack = this.packGen.generatePack();
     this.currentPack = pack;
@@ -118,12 +130,48 @@ export class GameManager {
     this.goTo('opening');
   }
 
+  private async loadBackgrounds(): Promise<void> {
+    const [packTex, revealTex] = await Promise.all([
+      AssetLoader.loadBackground('background_pack'),
+      AssetLoader.loadBackground('background_reveal'),
+    ]);
+
+    if (packTex) {
+      this.bgPackSprite = new Sprite(packTex);
+      this.bgLayer.addChild(this.bgPackSprite);
+      this.applyBgCover(this.bgPackSprite);
+      this.bgPackSprite.visible = (this.currentScreen === 'lobby');
+    }
+    if (revealTex) {
+      this.bgRevealSprite = new Sprite(revealTex);
+      this.bgLayer.addChild(this.bgRevealSprite);
+      this.applyBgCover(this.bgRevealSprite);
+      this.bgRevealSprite.visible = (this.currentScreen !== 'lobby');
+    }
+  }
+
+  private applyBgCover(sprite: Sprite): void {
+    const W = this.app.screen.width;
+    const H = this.app.screen.height;
+    // Cover: scale to fill screen maintaining aspect ratio, center in root-space
+    const scale = Math.max(W / sprite.texture.width, H / sprite.texture.height);
+    sprite.anchor.set(0.5);
+    sprite.x = 0;
+    sprite.y = 0;
+    sprite.scale.set(scale);
+  }
+
   private goTo(screen: Screen): void {
     this.lobby.hide();
     this.opening.hide();
     this.results.hide();
 
     this.currentScreen = screen;
+
+    // Switch background image: lobby → pack bg, opening/results → reveal bg
+    const isLobby = screen === 'lobby';
+    if (this.bgPackSprite)   this.bgPackSprite.visible  = isLobby;
+    if (this.bgRevealSprite) this.bgRevealSprite.visible = !isLobby;
 
     switch (screen) {
       case 'lobby':
@@ -147,6 +195,10 @@ export class GameManager {
       this.root.x = W / 2;
       this.root.y = H / 2;
     }
+
+    // Re-apply cover scaling for background images
+    if (this.bgPackSprite)   this.applyBgCover(this.bgPackSprite);
+    if (this.bgRevealSprite) this.applyBgCover(this.bgRevealSprite);
 
     // Clamp lobby/result scale for mobile portrait
     const scale = Math.min(1, W / 440, H / 720);

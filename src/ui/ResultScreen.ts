@@ -47,6 +47,11 @@ export class ResultScreen {
     // Preload all card art (already cached from pack opening — fast)
     const artTextures = await Promise.all(sortedCards.map(c => AssetLoader.loadCardArt(c.id)));
 
+    // Full-screen brown overlay — same tint as pack opening screen, persists across screens
+    const overlay = new Graphics();
+    overlay.rect(-4000, -4000, 8000, 8000).fill({ color: 0x040200, alpha: 0.55 });
+    this.contentLayer.addChild(overlay);
+
     // Background
     const bg = new Graphics();
     bg.roundRect(-W / 2, -H / 2, W, H, 20).fill({ color: 0x0d0700, alpha: 0.97 });

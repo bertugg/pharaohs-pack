@@ -34,7 +34,8 @@ export class PackOpeningScreen {
   // index 0 = first to reveal (visually on top)
   // index 4 = last to reveal (visually deepest)
   private stackCards: CardComponent[] = [];
-  private cardLayer!: Container;  // cards live here so particles always render above
+  private cardLayer!: Container;
+  private bgContainer!: Container;
   private revealIndex = 0;
   private phase: Phase = 'idle';
 
@@ -65,12 +66,15 @@ export class PackOpeningScreen {
   }
 
   private build(): void {
-    // Background
-    const bg = new Graphics();
-    bg.rect(-600, -400, 1200, 800).fill(0x080400);
-    this.container.addChild(bg);
+    // Background layer — procedural fallback + optional image sprites
+    this.bgContainer = new Container();
+    this.container.addChild(this.bgContainer);
 
-    // Atmospheric sand dots
+    const proceduralBg = new Graphics();
+    proceduralBg.rect(-4000, -4000, 8000, 8000).fill({ color: 0x040200, alpha: 0.55 });
+    this.bgContainer.addChild(proceduralBg);
+
+    // Atmospheric sand dots (part of fallback bg)
     const atm = new Graphics();
     for (let i = 0; i < 36; i++) {
       atm.circle(
@@ -79,7 +83,7 @@ export class PackOpeningScreen {
         0.5 + Math.random() * 1.5,
       ).fill({ color: 0x664422, alpha: 0.25 });
     }
-    this.container.addChild(atm);
+    this.bgContainer.addChild(atm);
 
     // Particles behind cards
     this.container.addChild(this.particles.container);
