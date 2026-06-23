@@ -1,0 +1,14 @@
+[workspace]
+authors = ["semih <sbenim@topgaming.dev>"]
+channels = ["conda-forge"]
+name = "flip-card"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "3.12.*"
+uv = ">=0.11.23,<0.12"
+git = ">=2.54.0,<3"
+nodejs = ">=26.3.1,<26.4"
