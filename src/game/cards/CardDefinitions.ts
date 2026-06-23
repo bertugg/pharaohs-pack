@@ -279,7 +279,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'divine_throne',
     name: 'Divine Throne',
     rarity: 'legendary',
-    payout: 50.00,
+    payout: 43.00,
     weight: 15,
     glowColor: 0xffaa00,
     description: 'The throne of the gods — sit upon it and rule eternity.',
