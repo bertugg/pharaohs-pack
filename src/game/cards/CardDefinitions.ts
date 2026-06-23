@@ -19,12 +19,13 @@ export interface CardDef {
 //   • Uncommon  $0.40 – $1.00   (min > common max,  max < rare min $1.20)
 //   • Rare      $1.20 – $4.20   (min > uncommon max, max < 1× pack price $5.00)
 //   • Epic      $6.50 – $9.80   (min > rare max,    range: 1× – 2× pack price)
-//   • Legendary $15.00 – $50.00 (min > epic max,    min > 2× pack price $10.00)
+//   • Legendary $12.00 – $50.00 (min > epic max,    min > 2× pack price $10.00)
 //   • No higher-rarity card can have a lower payout than any lower-rarity card.
 //
-// Pack generation uses per-pack rarity caps (common ≤3, epic ≤2, legendary ≤1).
-// Under constrained sampling, expected cards per pack (from 5M-pack simulation):
-//   common ~2.73  uncommon ~1.64  rare ~0.48  epic ~0.05  legendary ~0.10
+// Pack generation: rarity caps (common ≤3, epic ≤2, legendary ≤1) + post-gen
+// guarantee that replaces 1 uncommon with a rare when no rare+ card was drawn.
+// Expected cards per pack after guarantee (5M-pack simulation):
+//   common ~2.73  uncommon ~1.16  rare ~0.96  epic ~0.05  legendary ~0.10
 //
 // Weights calibrated so pack EV ≈ $4.75 → RTP ≈ 95%.
 // ---------------------------------------------------------------------------
@@ -241,13 +242,13 @@ export const CARD_DEFINITIONS: CardDef[] = [
   },
 
   // ── LEGENDARY (total weight 150) — all > 2× pack price $10 ─────────────
-  // Appears ~0.11×/pack under constrained sampling; avg payout $23.53
-  // calibrated for 95% RTP alongside common ≤3 / epic ≤2 caps.
+  // Appears ~0.10×/pack; avg payout $16.99. Payouts reduced from $15/$25/$40/$50
+  // to compensate for the rare+ guarantee boosting pack EV by ~$0.65.
   {
     id: 'book_of_the_dead',
     name: 'Book of the Dead',
     rarity: 'legendary',
-    payout: 15.00,
+    payout: 12.00,
     weight: 75,
     glowColor: 0xffaa00,
     description: 'The sacred spells that guide souls through the afterlife.',
@@ -257,7 +258,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'heart_of_ra',
     name: 'Heart of Ra',
     rarity: 'legendary',
-    payout: 25.00,
+    payout: 17.00,
     weight: 45,
     glowColor: 0xffaa00,
     description: 'The beating heart of the sun god himself.',
@@ -267,7 +268,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'treasure_of_tutankhamun',
     name: 'Treasure of Tutankhamun',
     rarity: 'legendary',
-    payout: 40.00,
+    payout: 22.00,
     weight: 22,
     glowColor: 0xffaa00,
     description: 'The legendary burial wealth of the boy-king.',

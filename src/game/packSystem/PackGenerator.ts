@@ -9,12 +9,12 @@ export interface Pack {
   seed: number;
 }
 
-// Per-pack rarity caps. common ≤3 guarantees ≥2 non-common cards per pack,
-// which inherently satisfies the "at least 1 uncommon or rare" floor without
-// a separate override.
 const CAPS: Record<string, number> = {
   common: 3, uncommon: Infinity, rare: Infinity, epic: 2, legendary: 1,
 };
+
+const RARE_POOL = CARD_DEFINITIONS.filter(c => c.rarity === 'rare');
+const RARE_POOL_W = RARE_POOL.reduce((s, c) => s + c.weight, 0);
 
 // All pack contents are determined BEFORE any reveal animation begins.
 // The server would do this; here we simulate it client-side.
@@ -38,6 +38,14 @@ export class PackGenerator {
       const card = packRng.weightedPick(pool, totalW);
       counts[card.rarity]++;
       cards.push(card);
+    }
+
+    // Guarantee at least 1 rare+ card per pack (~48% of packs need this).
+    // Replace one uncommon with a weighted-random rare to keep EV in band.
+    const hasRarePlus = cards.some(c => c.rarity === 'rare' || c.rarity === 'epic' || c.rarity === 'legendary');
+    if (!hasRarePlus) {
+      const ui = cards.findIndex(c => c.rarity === 'uncommon');
+      if (ui !== -1) cards[ui] = packRng.weightedPick(RARE_POOL, RARE_POOL_W);
     }
 
     const totalPayout = cards.reduce((s, c) => s + c.payout, 0);
