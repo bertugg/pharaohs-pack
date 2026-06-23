@@ -108,13 +108,13 @@ export class GameManager {
     }
   }
 
-  private handleBuyPack(): void {
+  private async handleBuyPack(): Promise<void> {
     if (!this.economy.canAffordPack()) return;
     this.economy.buyPack();
     const pack = this.packGen.generatePack();
     this.currentPack = pack;
     EventBus.emit('pack:generated', pack);
-    this.opening.setPack(pack);
+    await this.opening.setPack(pack);
     this.goTo('opening');
   }
 

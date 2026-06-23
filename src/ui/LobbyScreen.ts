@@ -1,11 +1,23 @@
-import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
 import { EventBus } from '../managers/EventBus';
 import { type EconomyManager } from '../game/economy/EconomyManager';
 import { PACK_PRICE } from '../game/math/RTPModel';
 import { computeRTPReport } from '../game/math/RTPModel';
+import { AssetLoader } from '../managers/AssetLoader';
 
 const W = 420;
 const H = 700;
+const HEADER_H = 80;
+
+// Stats panel sits OUTSIDE the main rectangle, to the right
+const STATS_X = W / 2 + 15;   // 225 — starts past the right border
+const STATS_W = 180;
+const STATS_Y = -H / 2 + HEADER_H + 10;  // -260
+const STATS_H = 310;
+
+// Pack is centered in the main panel; doubled vertically spans ±170
+const PACK_CX = 0;
+const PACK_CY = -80;
 
 export class LobbyScreen {
   readonly container: Container;
@@ -13,6 +25,7 @@ export class LobbyScreen {
   private buyBtn!: Container;
   private statsLabel!: Text;
   private economy: EconomyManager;
+  private packArtLayer!: Container;
 
   constructor(economy: EconomyManager) {
     this.economy = economy;
@@ -22,24 +35,24 @@ export class LobbyScreen {
   }
 
   private build(): void {
-    // Background panel
+    // ── Background ──────────────────────────────────────────
     const bg = new Graphics();
-    bg.roundRect(-W / 2, -H / 2, W, H, 20).fill({ color: 0x0d0700, alpha: 0.95 });
+    bg.roundRect(-W / 2, -H / 2, W, H, 20).fill({ color: 0x000033 });
     bg.roundRect(-W / 2, -H / 2, W, H, 20).stroke({ color: 0x886600, width: 2 });
     this.container.addChild(bg);
 
-    // Header decoration
-    const header = new Graphics();
-    header.rect(-W / 2, -H / 2, W, 80).fill({ color: 0x1a0d00, alpha: 0.8 });
-    header.moveTo(-W / 2, -H / 2 + 80).lineTo(W / 2, -H / 2 + 80).stroke({ color: 0x886600, width: 1 });
-    this.container.addChild(header);
+    // ── Header ──────────────────────────────────────────────
+    const headerBg = new Graphics();
+    headerBg.rect(-W / 2, -H / 2, W, HEADER_H).fill({ color: 0x00001a, alpha: 0.9 });
+    headerBg.moveTo(-W / 2, -H / 2 + HEADER_H).lineTo(W / 2, -H / 2 + HEADER_H)
+      .stroke({ color: 0x886600, width: 1 });
+    this.container.addChild(headerBg);
 
-    // Title
     const title = new Text({
       text: "PHARAOH'S PACK",
       style: new TextStyle({
         fontFamily: 'Georgia, serif',
-        fontSize: 28,
+        fontSize: 24,
         fill: 0xffcc00,
         fontWeight: 'bold',
         letterSpacing: 4,
@@ -47,59 +60,76 @@ export class LobbyScreen {
       }),
     });
     title.anchor.set(0.5);
-    title.y = -H / 2 + 38;
+    title.x = -35;
+    title.y = -H / 2 + 28;
     this.container.addChild(title);
 
     const subtitle = new Text({
       text: 'Ancient Egypt Card Reveals',
-      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 12, fill: 0xaa7700, letterSpacing: 2 }),
+      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 11, fill: 0xaa7700, letterSpacing: 2 }),
     });
     subtitle.anchor.set(0.5);
-    subtitle.y = -H / 2 + 62;
+    subtitle.x = -35;
+    subtitle.y = -H / 2 + 56;
     this.container.addChild(subtitle);
 
-    // Pack art area
+    // ── Deposit button — small, top-right ───────────────────
+    const depositBtn = this.buildSmallButton('+$50', 0x1a5c33, 0xffffff, () => {
+      this.economy.deposit(50);
+    });
+    depositBtn.x = W / 2 - 52;
+    depositBtn.y = -H / 2 + 38;
+    this.container.addChild(depositBtn);
+
+    // ── Pack art — doubled size, centered ───────────────────
     this.buildPackArt();
 
-    // Balance section
-    const balBg = new Graphics();
-    balBg.roundRect(-120, -20, 240, 50, 10).fill({ color: 0x1a0d00, alpha: 0.8 });
-    balBg.roundRect(-120, -20, 240, 50, 10).stroke({ color: 0x664400, width: 1 });
-    balBg.y = -H / 2 + 280;
-    this.container.addChild(balBg);
+    // ── Stats panel — outside the main rectangle ─────────────
+    this.buildStatsPanel();
 
+    // ── Separator ───────────────────────────────────────────
+    const sep = new Graphics();
+    sep.rect(-W / 2 + 20, 130, W - 40, 1).fill({ color: 0x886600, alpha: 0.4 });
+    this.container.addChild(sep);
+
+    // ── Balance ─────────────────────────────────────────────
     const balTitle = new Text({
       text: 'BALANCE',
-      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 10, fill: 0x886644, letterSpacing: 3 }),
+      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 9, fill: 0x886644, letterSpacing: 3 }),
     });
     balTitle.anchor.set(0.5);
-    balTitle.y = -H / 2 + 270;
+    balTitle.y = 148;
     this.container.addChild(balTitle);
+
+    const balBg = new Graphics();
+    balBg.roundRect(-110, 158, 220, 44, 10).fill({ color: 0x00001a, alpha: 0.9 });
+    balBg.roundRect(-110, 158, 220, 44, 10).stroke({ color: 0x664400, width: 1 });
+    this.container.addChild(balBg);
 
     this.balanceLabel = new Text({
       text: `$${this.economy.balance.toFixed(2)}`,
       style: new TextStyle({
         fontFamily: 'Georgia, serif',
-        fontSize: 32,
+        fontSize: 28,
         fill: 0xffdd88,
         fontWeight: 'bold',
         dropShadow: { color: 0xff8800, blur: 8, distance: 0, angle: 0 },
       }),
     });
     this.balanceLabel.anchor.set(0.5);
-    this.balanceLabel.y = -H / 2 + 295;
+    this.balanceLabel.y = 180;
     this.container.addChild(this.balanceLabel);
 
-    // Pack price info
+    // ── Pack price info ──────────────────────────────────────
     const priceText = new Text({
       text: `Pack Price: $${PACK_PRICE.toFixed(2)}  •  5 Cards`,
-      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 13, fill: 0x886644 }),
+      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 12, fill: 0x886644 }),
     });
     priceText.anchor.set(0.5);
-    priceText.y = -H / 2 + 345;
+    priceText.y = 222;
     this.container.addChild(priceText);
 
-    // Buy button
+    // ── Buy button ───────────────────────────────────────────
     this.buyBtn = this.buildButton(
       `OPEN PACK  $${PACK_PRICE.toFixed(2)}`,
       0xffcc00,
@@ -108,44 +138,12 @@ export class LobbyScreen {
         if (this.economy.canAffordPack()) EventBus.emit('pack:buy', undefined);
       },
     );
-    this.buyBtn.y = -H / 2 + 400;
+    this.buyBtn.y = 265;
     this.container.addChild(this.buyBtn);
 
-    // Deposit button
-    const depositBtn = this.buildButton('+$50 DEPOSIT', 0x226633, 0xffffff, () => {
-      this.economy.deposit(50);
-    });
-    depositBtn.y = -H / 2 + 460;
-    this.container.addChild(depositBtn);
-
-    // RTP info
-    const report = computeRTPReport();
-    const rtpText = new Text({
-      text: `Theoretical RTP: ${(report.rtp * 100).toFixed(1)}%  •  95% target`,
-      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 10, fill: 0x664433, align: 'center' }),
-    });
-    rtpText.anchor.set(0.5);
-    rtpText.y = -H / 2 + 510;
-    this.container.addChild(rtpText);
-
-    // Session stats
-    this.statsLabel = new Text({
-      text: this.buildStatsText(),
-      style: new TextStyle({
-        fontFamily: 'Georgia, serif',
-        fontSize: 11,
-        fill: 0x886644,
-        align: 'center',
-        lineHeight: 18,
-      }),
-    });
-    this.statsLabel.anchor.set(0.5);
-    this.statsLabel.y = -H / 2 + 560;
-    this.container.addChild(this.statsLabel);
-
-    // Bottom ornament
+    // ── Footer ───────────────────────────────────────────────
     const ornament = new Graphics();
-    ornament.rect(-80, H / 2 - 30, 160, 1).fill({ color: 0x886600, alpha: 0.5 });
+    ornament.rect(-80, H / 2 - 35, 160, 1).fill({ color: 0x886600, alpha: 0.5 });
     this.container.addChild(ornament);
 
     const footer = new Text({
@@ -153,40 +151,121 @@ export class LobbyScreen {
       style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 9, fill: 0x443322, align: 'center' }),
     });
     footer.anchor.set(0.5);
-    footer.y = H / 2 - 16;
+    footer.y = H / 2 - 20;
     this.container.addChild(footer);
   }
 
   private buildPackArt(): void {
-    const g = new Graphics();
-    // Pack body
-    g.roundRect(-55, -65, 110, 140, 8).fill(0x1a0800);
-    g.roundRect(-55, -65, 110, 140, 8).stroke({ color: 0xcc9900, width: 3 });
-    g.roundRect(-48, -58, 96, 126, 5).stroke({ color: 0x664400, width: 1 });
+    this.packArtLayer = new Container();
+    this.packArtLayer.x = PACK_CX;
+    this.packArtLayer.y = PACK_CY;
+    this.container.addChild(this.packArtLayer);
 
-    // Pack symbol
-    g.circle(0, -5, 28).fill({ color: 0xcc9900, alpha: 0.15 });
-    g.circle(0, -5, 28).stroke({ color: 0xcc9900, width: 2 });
+    this.drawProceduralPack();
 
-    // Pyramid symbol
-    g.moveTo(0, -28).lineTo(24, 18).lineTo(-24, 18).lineTo(0, -28).fill({ color: 0xcc9900, alpha: 0.8 });
-
-    // Five card count dots
-    for (let i = 0; i < 5; i++) {
-      g.circle(-32 + i * 16, 52, 4).fill(0xcc9900);
-    }
-
-    g.y = -H / 2 + 178;
-    this.container.addChild(g);
-
-    // Pack label
     const packLabel = new Text({
       text: 'ANCIENT PACK',
       style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 11, fill: 0xcc9900, letterSpacing: 2 }),
     });
     packLabel.anchor.set(0.5);
-    packLabel.y = -H / 2 + 238;
+    packLabel.y = PACK_CY + 190;
     this.container.addChild(packLabel);
+
+    AssetLoader.loadPackImage().then(tex => {
+      if (!tex) return;
+      this.packArtLayer.removeChildren();
+      const sprite = new Sprite(tex);
+      sprite.anchor.set(0.5);
+      const scale = Math.min(240 / tex.width, 360 / tex.height);
+      sprite.scale.set(scale);
+      this.packArtLayer.addChild(sprite);
+    });
+  }
+
+  private buildStatsPanel(): void {
+    const sx = STATS_X;
+    const sy = STATS_Y;
+    const sw = STATS_W;
+    const sh = STATS_H;
+    const cx = sx + sw / 2;
+
+    // Brown panel — outside the main rectangle
+    const statsBg = new Graphics();
+    statsBg.roundRect(sx, sy, sw, sh, 10).fill({ color: 0x3d1500 });
+    statsBg.roundRect(sx, sy, sw, sh, 10).stroke({ color: 0x886600, width: 1 });
+    this.container.addChild(statsBg);
+
+    const statsTitle = new Text({
+      text: 'SESSION STATS',
+      style: new TextStyle({
+        fontFamily: 'Georgia, serif',
+        fontSize: 11,
+        fill: 0xffcc00,
+        fontWeight: 'bold',
+        letterSpacing: 2,
+      }),
+    });
+    statsTitle.anchor.set(0.5);
+    statsTitle.x = cx;
+    statsTitle.y = sy + 20;
+    this.container.addChild(statsTitle);
+
+    const div1 = new Graphics();
+    div1.rect(sx + 10, sy + 34, sw - 20, 1).fill({ color: 0x886600, alpha: 0.6 });
+    this.container.addChild(div1);
+
+    const report = computeRTPReport();
+    const rtpInfoText = new Text({
+      text: `Theoretical RTP\n${(report.rtp * 100).toFixed(1)}%  (target 95%)`,
+      style: new TextStyle({
+        fontFamily: 'Georgia, serif',
+        fontSize: 10,
+        fill: 0xcc9944,
+        align: 'center',
+        lineHeight: 17,
+      }),
+    });
+    rtpInfoText.anchor.set(0.5);
+    rtpInfoText.x = cx;
+    rtpInfoText.y = sy + 62;
+    this.container.addChild(rtpInfoText);
+
+    const div2 = new Graphics();
+    div2.rect(sx + 10, sy + 90, sw - 20, 1).fill({ color: 0x664433, alpha: 0.4 });
+    this.container.addChild(div2);
+
+    this.statsLabel = new Text({
+      text: this.buildStatsText(),
+      style: new TextStyle({
+        fontFamily: 'Georgia, serif',
+        fontSize: 11,
+        fill: 0xaa8855,
+        align: 'center',
+        lineHeight: 22,
+      }),
+    });
+    this.statsLabel.anchor.set(0.5);
+    this.statsLabel.x = cx;
+    this.statsLabel.y = sy + 185;
+    this.container.addChild(this.statsLabel);
+  }
+
+  private drawProceduralPack(): void {
+    const g = new Graphics();
+    // Doubled from 110×170 → 220×340
+    g.roundRect(-110, -170, 220, 340, 16).fill(0x00001a);
+    g.roundRect(-110, -170, 220, 340, 16).stroke({ color: 0xcc9900, width: 5 });
+    g.roundRect(-94, -152, 188, 304, 10).stroke({ color: 0x664400, width: 2 });
+
+    g.circle(0, -20, 60).fill({ color: 0xcc9900, alpha: 0.15 });
+    g.circle(0, -20, 60).stroke({ color: 0xcc9900, width: 3 });
+    g.moveTo(0, -72).lineTo(52, 32).lineTo(-52, 32).lineTo(0, -72).fill({ color: 0xcc9900, alpha: 0.8 });
+
+    for (let i = 0; i < 5; i++) {
+      g.circle(-64 + i * 32, 126, 8).fill(0xcc9900);
+    }
+
+    this.packArtLayer.addChild(g);
   }
 
   private buildButton(label: string, bgColor: number, textColor: number, onClick: () => void): Container {
@@ -211,15 +290,42 @@ export class LobbyScreen {
     txt.anchor.set(0.5);
     btn.addChild(txt);
 
-    btn.on('pointerdown', () => {
-      btn.scale.set(0.95);
-      onClick();
-    });
+    btn.on('pointerdown', () => { btn.scale.set(0.95); onClick(); });
     btn.on('pointerup', () => btn.scale.set(1));
     btn.on('pointerupoutside', () => btn.scale.set(1));
     btn.on('pointerover', () => { bg.tint = 0xdddddd; });
     btn.on('pointerout', () => { bg.tint = 0xffffff; });
 
+    return btn;
+  }
+
+  private buildSmallButton(label: string, bgColor: number, textColor: number, onClick: () => void): Container {
+    const btn = new Container();
+    btn.eventMode = 'static';
+    btn.cursor = 'pointer';
+
+    const bg = new Graphics();
+    bg.roundRect(-38, -14, 76, 28, 7).fill(bgColor);
+    btn.addChild(bg);
+
+    const txt = new Text({
+      text: label,
+      style: new TextStyle({
+        fontFamily: 'Georgia, serif',
+        fontSize: 11,
+        fill: textColor,
+        fontWeight: 'bold',
+        letterSpacing: 1,
+      }),
+    });
+    txt.anchor.set(0.5);
+    btn.addChild(txt);
+
+    btn.on('pointerdown', () => { btn.scale.set(0.95); onClick(); });
+    btn.on('pointerup', () => btn.scale.set(1));
+    btn.on('pointerupoutside', () => btn.scale.set(1));
+    btn.on('pointerover', () => { bg.tint = 0xdddddd; });
+    btn.on('pointerout', () => { bg.tint = 0xffffff; });
 
     return btn;
   }
@@ -228,15 +334,16 @@ export class LobbyScreen {
     const s = this.economy.sessionStats;
     const rtp = s.totalWagered > 0 ? (s.sessionRTP * 100).toFixed(1) + '%' : 'N/A';
     return [
-      `Packs opened: ${s.packsOpened}   Wagered: $${s.totalWagered.toFixed(2)}`,
-      `Total won: $${s.totalWon.toFixed(2)}   Session RTP: ${rtp}`,
+      `Packs: ${s.packsOpened}`,
+      `Wagered: $${s.totalWagered.toFixed(2)}`,
+      `Won: $${s.totalWon.toFixed(2)}`,
+      `Session RTP: ${rtp}`,
     ].join('\n');
   }
 
   updateBalance(balance: number): void {
     this.balanceLabel.text = `$${balance.toFixed(2)}`;
     this.statsLabel.text = this.buildStatsText();
-    // Dim buy button if insufficient
     this.buyBtn.alpha = this.economy.canAffordPack() ? 1.0 : 0.4;
   }
 

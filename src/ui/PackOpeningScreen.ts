@@ -5,20 +5,21 @@ import { CardFlipAnimation } from '../animations/CardFlipAnimation';
 import { ParticleSystem } from '../animations/ParticleSystem';
 import { EventBus } from '../managers/EventBus';
 import { AudioManager } from '../managers/AudioManager';
+import { AssetLoader } from '../managers/AssetLoader';
 import type { EconomyManager } from '../game/economy/EconomyManager';
 
 // Stack geometry — each card behind the top one peeks out to the right and below
 const STACK_X = 0;
 const STACK_Y = -50;
-const STACK_OFFSET_X = 4;    // x shift per depth step
-const STACK_OFFSET_Y = 7;    // y shift per depth step
-const STACK_SCALE_STEP = 0.025; // scale decrease per depth step
+const STACK_OFFSET_X = 6;    // x shift per depth step
+const STACK_OFFSET_Y = 12;   // y shift per depth step
+const STACK_SCALE_STEP = 0.02; // scale decrease per depth step
 
 // Revealed row shown at the bottom of the screen
 const TOTAL_CARDS = 5;
-const REVEALED_Y = 210;
-const REVEALED_SCALE = 0.52;
-const REVEALED_SPACING = 80;
+const REVEALED_Y = 230;
+const REVEALED_SCALE = 0.27;   // 280 × 0.27 ≈ 76 px wide per card
+const REVEALED_SPACING = 100;
 
 type Phase = 'idle' | 'flipping' | 'showing' | 'done';
 
@@ -80,12 +81,12 @@ export class PackOpeningScreen {
     }
     this.container.addChild(atm);
 
-    // Card layer — sits below particles
+    // Particles behind cards
+    this.container.addChild(this.particles.container);
+
+    // Card layer — sits above particles
     this.cardLayer = new Container();
     this.container.addChild(this.cardLayer);
-
-    // Particles above cards
-    this.container.addChild(this.particles.container);
 
     // Header UI (above everything)
     const headerBar = new Graphics();
@@ -146,7 +147,7 @@ export class PackOpeningScreen {
     };
   }
 
-  setPack(pack: Pack): void {
+  async setPack(pack: Pack): Promise<void> {
     this.pack = pack;
     this.revealIndex = 0;
     this.phase = 'idle';
@@ -156,12 +157,31 @@ export class PackOpeningScreen {
     this.stackCards = [];
     this.cardLayer.removeChildren();
 
+    // Preload card back + all card artwork textures in parallel
+    const [backTex, ...artTextures] = await Promise.all([
+      AssetLoader.loadCardBack(),
+      ...pack.cards.map(c => AssetLoader.loadCardArt(c.id)),
+    ]);
+
+    // Sort lowest → highest so the best card is revealed last.
+    // Pair each card with its texture so they stay in sync after sorting.
+    const RARITY_ORDER: Record<string, number> = {
+      common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4,
+    };
+    const sorted = pack.cards
+      .map((card, i) => ({ card, tex: artTextures[i] }))
+      .sort((a, b) =>
+        RARITY_ORDER[a.card.rarity] - RARITY_ORDER[b.card.rarity]
+        || a.card.payout - b.card.payout,
+      );
+
     // Add cards deepest-first so the top card (index 0) renders last → on top.
-    // pack.cards[4] = last to reveal = deepest in stack (added first, renders at back).
-    // pack.cards[0] = first to reveal = top of stack (added last, renders on top).
-    for (let i = pack.cards.length - 1; i >= 0; i--) {
-      const comp = new CardComponent();
-      comp.assignCard(pack.cards[i]);
+    // sorted[4] = last to reveal = deepest in stack (added first, renders at back).
+    // sorted[0] = first to reveal = top of stack (added last, renders on top).
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const comp = new CardComponent(backTex);
+      comp.assignCard(sorted[i].card);
+      comp.setCardTexture(sorted[i].tex);
       const pos = this.stackPos(i);
       comp.container.x = pos.x;
       comp.container.y = pos.y;
@@ -169,6 +189,9 @@ export class PackOpeningScreen {
       this.cardLayer.addChild(comp.container);
       this.stackCards[i] = comp;
     }
+
+    // Keep a local reference so startReveal reads the sorted order
+    this.pack = { ...pack, cards: sorted.map(s => s.card) };
 
     this.updateProgress();
     this.hintLabel.visible = true;
@@ -205,12 +228,11 @@ export class PackOpeningScreen {
         .onHalf(() => {
           comp.revealFront();
           AudioManager.playForRarity(card.rarity);
+          this.particles.burstForRarity(comp.container.x, comp.container.y, card.rarity);
         })
         .onDone(() => {
           this.economy.awardCard(card.payout);
           EventBus.emit('card:revealed', { index: idx, card });
-
-          this.particles.burstForRarity(comp.container.x, comp.container.y, card.rarity);
 
           if (card.rarity === 'legendary') { this.shakeIntensity = 8; this.shakeDuration = 0.6; }
           else if (card.rarity === 'epic')  { this.shakeIntensity = 4; this.shakeDuration = 0.35; }
