@@ -7,23 +7,49 @@ import { EventBus } from '../managers/EventBus';
 import { AudioManager } from '../managers/AudioManager';
 import type { EconomyManager } from '../game/economy/EconomyManager';
 
-const SLOT_SPACING = 150;
+// Stack geometry — each card behind the top one peeks out to the right and below
+const STACK_X = 0;
+const STACK_Y = -50;
+const STACK_OFFSET_X = 4;    // x shift per depth step
+const STACK_OFFSET_Y = 7;    // y shift per depth step
+const STACK_SCALE_STEP = 0.025; // scale decrease per depth step
 
-type ScreenPhase = 'waiting' | 'revealing' | 'done';
+// Revealed row shown at the bottom of the screen
+const TOTAL_CARDS = 5;
+const REVEALED_Y = 210;
+const REVEALED_SCALE = 0.52;
+const REVEALED_SPACING = 80;
+
+type Phase = 'idle' | 'flipping' | 'showing' | 'done';
+
+interface Trans { tx: number; ty: number; ts: number }
 
 export class PackOpeningScreen {
   readonly container: Container;
-  private cardSlots: CardComponent[] = [];
+  private economy: EconomyManager;
+  private pack: Pack | null = null;
+
+  // stackCards[i] = CardComponent for pack.cards[i]
+  // index 0 = first to reveal (visually on top)
+  // index 4 = last to reveal (visually deepest)
+  private stackCards: CardComponent[] = [];
+  private cardLayer!: Container;  // cards live here so particles always render above
+  private revealIndex = 0;
+  private phase: Phase = 'idle';
+
   private particles: ParticleSystem;
+  private ticker: Ticker;
+  private transitions = new Map<Container, Trans>();
+
   private balanceLabel!: Text;
   private progressLabel!: Text;
-  private revealIndex = 0;
-  private pack: Pack | null = null;
-  private phase: ScreenPhase = 'waiting';
-  private economy: EconomyManager;
-  private ticker: Ticker;
-  private screenShake = { x: 0, y: 0, intensity: 0, duration: 0 };
-  private tapHint!: Text;
+  private hintLabel!: Text;
+  private shakeIntensity = 0;
+  private shakeDuration = 0;
+
+  private readonly onKeyDown = (e: KeyboardEvent) => {
+    if (e.code === 'Space') { e.preventDefault(); this.tryReveal(); }
+  };
 
   constructor(economy: EconomyManager) {
     this.economy = economy;
@@ -32,146 +58,142 @@ export class PackOpeningScreen {
     this.ticker = new Ticker();
     this.ticker.add(this.onTick.bind(this));
     this.build();
-
     EventBus.on('balance:changed', (bal) => {
       if (this.balanceLabel) this.balanceLabel.text = `$${bal.toFixed(2)}`;
     });
   }
 
   private build(): void {
-    // Atmospheric background
+    // Background
     const bg = new Graphics();
-    bg.rect(-500, -500, 1000, 1000).fill(0x080400);
+    bg.rect(-600, -400, 1200, 800).fill(0x080400);
     this.container.addChild(bg);
 
-    // Sand particle bg layer (static decorative)
-    const sandBg = new Graphics();
-    for (let i = 0; i < 40; i++) {
-      const x = (Math.random() - 0.5) * 800;
-      const y = (Math.random() - 0.5) * 600;
-      sandBg.circle(x, y, 1 + Math.random() * 2).fill({ color: 0x664422, alpha: 0.3 });
+    // Atmospheric sand dots
+    const atm = new Graphics();
+    for (let i = 0; i < 36; i++) {
+      atm.circle(
+        (Math.random() - 0.5) * 700,
+        (Math.random() - 0.5) * 500,
+        0.5 + Math.random() * 1.5,
+      ).fill({ color: 0x664422, alpha: 0.25 });
     }
-    this.container.addChild(sandBg);
+    this.container.addChild(atm);
 
-    // Header
-    const headerBg = new Graphics();
-    headerBg.rect(-500, -340, 1000, 50).fill({ color: 0x0d0700, alpha: 0.8 });
-    this.container.addChild(headerBg);
+    // Card layer — sits below particles
+    this.cardLayer = new Container();
+    this.container.addChild(this.cardLayer);
+
+    // Particles above cards
+    this.container.addChild(this.particles.container);
+
+    // Header UI (above everything)
+    const headerBar = new Graphics();
+    headerBar.rect(-600, -340, 1200, 50).fill({ color: 0x0d0700, alpha: 0.88 });
+    this.container.addChild(headerBar);
 
     const title = new Text({
       text: 'OPENING PACK',
-      style: new TextStyle({
-        fontFamily: 'Georgia, serif',
-        fontSize: 18,
-        fill: 0xcc9900,
-        letterSpacing: 6,
-      }),
+      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 18, fill: 0xcc9900, letterSpacing: 6 }),
     });
     title.anchor.set(0.5);
-    title.y = -318;
+    title.y = -317;
     this.container.addChild(title);
 
-    // Balance display
     this.balanceLabel = new Text({
-      text: `$${this.economy.balance.toFixed(2)}`,
-      style: new TextStyle({
-        fontFamily: 'Georgia, serif',
-        fontSize: 22,
-        fill: 0xffdd88,
-        fontWeight: 'bold',
-      }),
+      text: '',
+      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 22, fill: 0xffdd88, fontWeight: 'bold' }),
     });
     this.balanceLabel.anchor.set(0.5);
-    this.balanceLabel.y = -318;
-    this.balanceLabel.x = 180;
+    this.balanceLabel.x = 190;
+    this.balanceLabel.y = -317;
     this.container.addChild(this.balanceLabel);
 
-    // Progress dots
     this.progressLabel = new Text({
       text: '',
-      style: new TextStyle({
-        fontFamily: 'Georgia, serif',
-        fontSize: 13,
-        fill: 0x886644,
-        align: 'center',
-      }),
+      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 14, fill: 0x886644, align: 'center' }),
     });
     this.progressLabel.anchor.set(0.5);
-    this.progressLabel.y = -275;
+    this.progressLabel.y = -280;
     this.container.addChild(this.progressLabel);
 
-    // Tap hint
-    this.tapHint = new Text({
-      text: 'TAP TO REVEAL',
-      style: new TextStyle({
-        fontFamily: 'Georgia, serif',
-        fontSize: 14,
-        fill: 0xcc9900,
-        letterSpacing: 3,
-      }),
+    this.hintLabel = new Text({
+      text: 'TAP  OR  SPACE  TO  REVEAL',
+      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 12, fill: 0xcc9900, letterSpacing: 3 }),
     });
-    this.tapHint.anchor.set(0.5);
-    this.tapHint.y = 250;
-    this.container.addChild(this.tapHint);
+    this.hintLabel.anchor.set(0.5);
+    this.hintLabel.y = 310;
+    this.container.addChild(this.hintLabel);
 
-    // Particle system on top
-    this.container.addChild(this.particles.container);
-
-    // Interactive: tap anywhere to reveal next card
     this.container.eventMode = 'static';
-    this.container.on('pointerdown', () => this.tryRevealNext());
+    this.container.on('pointerdown', () => this.tryReveal());
+  }
+
+  // Position for a card at a given depth in the stack (0 = top/front)
+  private stackPos(depth: number): { x: number; y: number; s: number } {
+    return {
+      x: STACK_X + depth * STACK_OFFSET_X,
+      y: STACK_Y + depth * STACK_OFFSET_Y,
+      s: 1 - depth * STACK_SCALE_STEP,
+    };
+  }
+
+  // Final resting position in the revealed row at the bottom
+  private revealedPos(cardIndex: number): { x: number; y: number } {
+    return {
+      x: (cardIndex - (TOTAL_CARDS - 1) / 2) * REVEALED_SPACING,
+      y: REVEALED_Y,
+    };
   }
 
   setPack(pack: Pack): void {
     this.pack = pack;
     this.revealIndex = 0;
-    this.phase = 'waiting';
+    this.phase = 'idle';
+    this.transitions.clear();
 
-    // Clear old cards
-    for (const slot of this.cardSlots) slot.destroy();
-    this.cardSlots = [];
+    for (const c of this.stackCards) c.destroy();
+    this.stackCards = [];
+    this.cardLayer.removeChildren();
 
-    const totalW = (pack.cards.length - 1) * SLOT_SPACING;
-    const startX = -totalW / 2;
-
-    for (let i = 0; i < pack.cards.length; i++) {
+    // Add cards deepest-first so the top card (index 0) renders last → on top.
+    // pack.cards[4] = last to reveal = deepest in stack (added first, renders at back).
+    // pack.cards[0] = first to reveal = top of stack (added last, renders on top).
+    for (let i = pack.cards.length - 1; i >= 0; i--) {
       const comp = new CardComponent();
       comp.assignCard(pack.cards[i]);
-      comp.container.x = startX + i * SLOT_SPACING;
-      comp.container.y = 20;
-      comp.container.scale.set(1);
-      this.container.addChildAt(comp.container, this.container.children.length - 1);
-      this.cardSlots.push(comp);
+      const pos = this.stackPos(i);
+      comp.container.x = pos.x;
+      comp.container.y = pos.y;
+      comp.container.scale.set(pos.s);
+      this.cardLayer.addChild(comp.container);
+      this.stackCards[i] = comp;
     }
 
-    this.updateProgressDots();
-    this.tapHint.visible = true;
-    this.tapHint.alpha = 1;
+    this.updateProgress();
+    this.hintLabel.visible = true;
+    this.hintLabel.alpha = 1;
+    this.balanceLabel.text = `$${this.economy.balance.toFixed(2)}`;
     AudioManager.play('pack_open');
     this.ticker.start();
   }
 
-  private tryRevealNext(): void {
-    if (this.phase !== 'waiting') return;
-    if (this.revealIndex >= (this.pack?.cards.length ?? 0)) return;
-
-    this.phase = 'revealing';
-    this.tapHint.visible = false;
-    this.revealCard(this.revealIndex);
+  private tryReveal(): void {
+    if (this.phase !== 'idle') return;
+    if (!this.pack || this.revealIndex >= this.pack.cards.length) return;
+    this.phase = 'flipping';
+    this.hintLabel.visible = false;
+    this.startReveal();
   }
 
-  private revealCard(index: number): void {
-    const card = this.pack!.cards[index];
-    const comp = this.cardSlots[index];
+  private startReveal(): void {
+    const idx = this.revealIndex;
+    const card = this.pack!.cards[idx];
+    const comp = this.stackCards[idx];
 
-    EventBus.emit('card:reveal', { index, card });
+    const delay = card.rarity === 'legendary' ? 1100
+      : card.rarity === 'epic' ? 500 : 0;
 
-    // Anticipation pause for rare+
-    const delay = card.rarity === 'legendary' ? 1200
-      : card.rarity === 'epic' ? 600
-      : 0;
-
-    // Flash screen for legendary
     if (card.rarity === 'legendary') this.flashDark();
     if (card.rarity === 'epic') this.screenPulse(0.3);
 
@@ -185,143 +207,172 @@ export class PackOpeningScreen {
           AudioManager.playForRarity(card.rarity);
         })
         .onDone(() => {
-          // Particles at card center
-          const wx = comp.container.x;
-          const wy = comp.container.y;
-          this.particles.burstForRarity(wx, wy, card.rarity);
+          this.economy.awardCard(card.payout);
+          EventBus.emit('card:revealed', { index: idx, card });
 
-          // Screen shake for epic/legendary
-          if (card.rarity === 'legendary') this.startShake(8, 0.6);
-          else if (card.rarity === 'epic') this.startShake(4, 0.35);
-          else if (card.rarity === 'rare') this.startShake(2, 0.2);
+          this.particles.burstForRarity(comp.container.x, comp.container.y, card.rarity);
 
-          // Payout reveal
+          if (card.rarity === 'legendary') { this.shakeIntensity = 8; this.shakeDuration = 0.6; }
+          else if (card.rarity === 'epic')  { this.shakeIntensity = 4; this.shakeDuration = 0.35; }
+          else if (card.rarity === 'rare')  { this.shakeIntensity = 2; this.shakeDuration = 0.2; }
+
           comp.animatePayout(() => {
             if (card.rarity === 'epic' || card.rarity === 'legendary') comp.animateGlowPulse();
+            this.phase = 'showing';
 
-            // Award and advance
-            this.economy.awardCard(card.payout);
-            EventBus.emit('card:revealed', { index, card });
-            this.revealIndex++;
-            this.updateProgressDots();
-
-            if (this.revealIndex < (this.pack?.cards.length ?? 0)) {
-              this.phase = 'waiting';
-              this.showTapHint();
-            } else {
-              // All cards revealed
-              setTimeout(() => this.onAllRevealed(), 800);
-            }
+            // Auto-advance after a rarity-scaled pause
+            const pause = card.rarity === 'legendary' ? 1600
+              : card.rarity === 'epic' ? 1300
+              : card.rarity === 'rare' ? 1000 : 800;
+            setTimeout(() => this.exitCard(), pause);
           });
         });
 
-      // Attach animation to ticker
-      const tickId = this.ticker.add((t: Ticker) => {
+      const tickFn = (t: Ticker) => {
         anim.update(t.deltaTime / 60);
-        if (anim.isDone) this.ticker.remove(tickId as unknown as Parameters<typeof this.ticker.remove>[0]);
-      });
+        if (anim.isDone) this.ticker.remove(tickFn);
+      };
+      this.ticker.add(tickFn);
       anim.start();
     }, delay);
   }
 
-  private showTapHint(): void {
-    this.tapHint.visible = true;
-    this.tapHint.alpha = 0;
-    let t = 0;
-    const fade = () => {
-      t += 0.05;
-      this.tapHint.alpha = Math.min(t, 1);
-      if (t < 1) requestAnimationFrame(fade);
-    };
-    requestAnimationFrame(fade);
-  }
+  // Slide the current card to the bottom row and shift remaining stack cards forward
+  private exitCard(): void {
+    const idx = this.revealIndex;
+    const comp = this.stackCards[idx];
 
-  private onAllRevealed(): void {
-    this.phase = 'done';
-    this.tapHint.visible = false;
-    AudioManager.play('win_fanfare');
-    EventBus.emit('pack:complete', { totalPayout: this.pack!.totalPayout });
-    EventBus.emit('screen:results', undefined);
-  }
+    // Exit revealed card → bottom row position
+    const rpos = this.revealedPos(idx);
+    this.transitions.set(comp.container, { tx: rpos.x, ty: rpos.y, ts: REVEALED_SCALE });
 
-  private updateProgressDots(): void {
-    const total = this.pack?.cards.length ?? 5;
-    let dots = '';
-    for (let i = 0; i < total; i++) {
-      dots += i < this.revealIndex ? '◆ ' : '◇ ';
+    // Shift remaining cards one depth step closer to the front
+    const remaining = (this.pack?.cards.length ?? TOTAL_CARDS) - idx - 1;
+    for (let d = 1; d <= remaining; d++) {
+      const nextComp = this.stackCards[idx + d];
+      const npos = this.stackPos(d - 1); // was depth d, becomes depth d-1
+      this.transitions.set(nextComp.container, { tx: npos.x, ty: npos.y, ts: npos.s });
     }
-    this.progressLabel.text = dots.trim();
+
+    // Advance state once the transition is mostly done
+    setTimeout(() => {
+      this.revealIndex++;
+      this.updateProgress();
+
+      if (this.revealIndex >= (this.pack?.cards.length ?? 0)) {
+        this.phase = 'done';
+        setTimeout(() => {
+          AudioManager.play('win_fanfare');
+          EventBus.emit('pack:complete', { totalPayout: this.pack!.totalPayout });
+          EventBus.emit('screen:results', undefined);
+        }, 400);
+      } else {
+        this.phase = 'idle';
+        this.fadeInHint();
+      }
+    }, 450);
   }
 
-  // ── Effects ──────────────────────────────────────────────────────────────
+  private fadeInHint(): void {
+    this.hintLabel.visible = true;
+    this.hintLabel.alpha = 0;
+    const step = () => {
+      this.hintLabel.alpha = Math.min(this.hintLabel.alpha + 0.06, 1);
+      if (this.hintLabel.alpha < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  private updateProgress(): void {
+    const total = this.pack?.cards.length ?? TOTAL_CARDS;
+    let s = '';
+    for (let i = 0; i < total; i++) s += (i < this.revealIndex ? '◆' : '◇') + (i < total - 1 ? ' ' : '');
+    this.progressLabel.text = s;
+  }
+
+  // ── Visual effects ────────────────────────────────────────────────────────
 
   private flashDark(): void {
-    const overlay = new Graphics();
-    overlay.rect(-500, -500, 1000, 1000).fill({ color: 0x000000, alpha: 0 });
-    this.container.addChild(overlay);
-    let alpha = 0;
-    let dir = 1;
-    let frames = 0;
+    const ov = new Graphics();
+    ov.rect(-600, -400, 1200, 800).fill({ color: 0x000000, alpha: 0 });
+    this.container.addChild(ov);
+    let a = 0; let dir = 1;
     const f = () => {
-      frames++;
-      alpha += 0.06 * dir;
-      if (alpha >= 0.85) dir = -1;
-      overlay.clear().rect(-500, -500, 1000, 1000).fill({ color: 0x000000, alpha: Math.max(0, alpha) });
-      if (alpha > 0 || frames < 5) requestAnimationFrame(f);
-      else { this.container.removeChild(overlay); overlay.destroy(); }
+      a += 0.06 * dir; if (a >= 0.88) dir = -1;
+      ov.clear().rect(-600, -400, 1200, 800).fill({ color: 0x000000, alpha: Math.max(0, a) });
+      if (a > 0 || dir === 1) requestAnimationFrame(f);
+      else { this.container.removeChild(ov); ov.destroy(); }
     };
     requestAnimationFrame(f);
   }
 
   private screenPulse(intensity: number): void {
-    const overlay = new Graphics();
-    overlay.rect(-500, -500, 1000, 1000).fill({ color: 0xffffff, alpha: intensity });
-    this.container.addChild(overlay);
+    const ov = new Graphics();
+    ov.rect(-600, -400, 1200, 800).fill({ color: 0xffffff, alpha: intensity });
+    this.container.addChild(ov);
     let a = intensity;
     const f = () => {
       a -= 0.04;
-      overlay.clear().rect(-500, -500, 1000, 1000).fill({ color: 0xffffff, alpha: Math.max(0, a) });
+      ov.clear().rect(-600, -400, 1200, 800).fill({ color: 0xffffff, alpha: Math.max(0, a) });
       if (a > 0) requestAnimationFrame(f);
-      else { this.container.removeChild(overlay); overlay.destroy(); }
+      else { this.container.removeChild(ov); ov.destroy(); }
     };
     requestAnimationFrame(f);
   }
 
-  private startShake(intensity: number, duration: number): void {
-    this.screenShake = { x: 0, y: 0, intensity, duration };
-  }
+  // ── Tick ─────────────────────────────────────────────────────────────────
 
   private onTick(ticker: Ticker): void {
     const dt = ticker.deltaTime / 60;
 
+    // Lerp all active position transitions
+    const done: Container[] = [];
+    for (const [c, t] of this.transitions) {
+      c.x += (t.tx - c.x) * 8 * dt;
+      c.y += (t.ty - c.y) * 8 * dt;
+      const s = c.scale.x + (t.ts - c.scale.x) * 8 * dt;
+      c.scale.set(s);
+      if (Math.abs(c.x - t.tx) < 0.5 && Math.abs(c.y - t.ty) < 0.5 && Math.abs(c.scale.x - t.ts) < 0.005) {
+        c.x = t.tx; c.y = t.ty; c.scale.set(t.ts); done.push(c);
+      }
+    }
+    done.forEach((c) => this.transitions.delete(c));
+
     // Screen shake
-    if (this.screenShake.duration > 0) {
-      this.screenShake.duration -= dt;
-      const i = this.screenShake.intensity * (this.screenShake.duration / 0.6);
-      this.container.x = (Math.random() - 0.5) * i * 2;
-      this.container.y = (Math.random() - 0.5) * i * 2;
-    } else {
-      this.container.x = 0;
-      this.container.y = 0;
+    if (this.shakeDuration > 0) {
+      this.shakeDuration -= dt;
+      const si = this.shakeIntensity * Math.max(0, this.shakeDuration / 0.6);
+      this.container.x = (Math.random() - 0.5) * si * 2;
+      this.container.y = (Math.random() - 0.5) * si * 2;
+      if (this.shakeDuration <= 0) { this.container.x = 0; this.container.y = 0; }
     }
 
-    // Tap hint pulse
-    if (this.tapHint.visible) {
-      const time = performance.now() / 1000;
-      this.tapHint.alpha = 0.6 + 0.4 * Math.sin(time * 3);
+    // Hint pulse when waiting
+    if (this.hintLabel.visible && this.phase === 'idle') {
+      this.hintLabel.alpha = 0.55 + 0.45 * Math.sin(performance.now() / 400);
     }
 
     this.particles.update(dt);
   }
 
-  show(): void { this.container.visible = true; }
-  hide(): void { this.container.visible = false; }
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+  show(): void {
+    this.container.visible = true;
+    window.addEventListener('keydown', this.onKeyDown);
+  }
+
+  hide(): void {
+    this.container.visible = false;
+    window.removeEventListener('keydown', this.onKeyDown);
+  }
 
   destroy(): void {
     this.ticker.stop();
     this.ticker.destroy();
     this.particles.destroy();
-    for (const s of this.cardSlots) s.destroy();
+    window.removeEventListener('keydown', this.onKeyDown);
+    for (const c of this.stackCards) c.destroy();
     this.container.destroy({ children: true });
   }
 }
