@@ -1,5 +1,8 @@
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
+export const PACK_PRICE = 5.00;
+export const CARDS_PER_PACK = 5;
+
 export interface CardDef {
   id: string;
   name: string;

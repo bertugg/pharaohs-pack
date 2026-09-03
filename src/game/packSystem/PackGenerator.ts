@@ -1,6 +1,5 @@
-import { CARD_DEFINITIONS, type CardDef } from '../cards/CardDefinitions';
+import { CARD_DEFINITIONS, CARDS_PER_PACK, type CardDef } from '../cards/CardDefinitions';
 import { RNGService } from './RNGService';
-import { CARDS_PER_PACK } from '../math/RTPModel';
 
 export interface Pack {
   id: string;
