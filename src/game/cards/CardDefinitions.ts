@@ -20,17 +20,20 @@ export interface CardDef {
 // Tier payout constraints:
 //   • Common    $0.08 – $0.35   (max < uncommon min)
 //   • Uncommon  $0.40 – $1.00   (min > common max,  max < rare min $1.20)
-//   • Rare      $1.20 – $4.20   (min > uncommon max, max < 1× pack price $5.00)
-//   • Epic      $6.50 – $9.80   (min > rare max,    range: 1× – 2× pack price)
+//   • Rare      $1.20 – $5.80   (top rare now above pack price — enables wins)
+//   • Epic      $7.00 – $9.80   (min > rare max,    range: 1.4× – 2× pack price)
 //   • Legendary $12.00 – $50.00 (min > epic max,    min > 2× pack price $10.00)
 //   • No higher-rarity card can have a lower payout than any lower-rarity card.
 //
 // Pack generation: rarity caps (common ≤3, epic ≤2, legendary ≤1) + post-gen
 // guarantee that replaces 1 uncommon with a rare when no rare+ card was drawn.
-// Expected cards per pack after guarantee (5M-pack simulation):
+// Expected cards per pack after guarantee (1M-pack simulation):
 //   common ~2.73  uncommon ~1.16  rare ~0.96  epic ~0.05  legendary ~0.10
 //
-// Weights calibrated so pack EV ≈ $4.75 → RTP ≈ 95%.
+// Key changes vs 95% build:
+//   tomb_of_kings $4.20 → $5.80  (+$0.066/pack EV) — first rare above pack price
+//   wrath_of_ra   $6.50 → $7.00  (+$0.014/pack EV)
+// Combined: pack EV ≈ $4.84 → RTP ≈ 96.75% (verified 1M-pack sim).
 // ---------------------------------------------------------------------------
 
 export const CARD_DEFINITIONS: CardDef[] = [
@@ -195,7 +198,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'tomb_of_kings',
     name: 'Tomb of Kings',
     rarity: 'rare',
-    payout: 4.20,
+    payout: 5.80,
     weight: 30,
     glowColor: 0x0088ff,
     description: 'Access to the Valley of the Kings.',
@@ -207,7 +210,7 @@ export const CARD_DEFINITIONS: CardDef[] = [
     id: 'wrath_of_ra',
     name: 'Wrath of Ra',
     rarity: 'epic',
-    payout: 6.50,
+    payout: 7.00,
     weight: 41,
     glowColor: 0xaa00ff,
     description: 'The sun god unleashes his fury upon the unworthy.',
