@@ -52,7 +52,7 @@ class AudioManagerClass {
   async startMusic(): Promise<void> {
     if (this.musicSource || !this.ctx) return;
     this.resume();
-    const url = '/music_default.mp3';
+    const url = `${import.meta.env.BASE_URL}music_default.mp3`;
     try {
       const probe = await fetch(url, { method: 'HEAD' });
       if (!probe.ok) return;

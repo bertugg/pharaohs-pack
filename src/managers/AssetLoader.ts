@@ -17,7 +17,7 @@ class AssetLoaderClass {
   async loadFromCards(name: string): Promise<Texture | null> {
     if (this.cache.has(name)) return this.cache.get(name)!;
     for (const ext of EXTS) {
-      const url = `/cards/${name}.${ext}`;
+      const url = `${import.meta.env.BASE_URL}cards/${name}.${ext}`;
       if (await probeExists(url)) {
         try {
           const tex = await Assets.load<Texture>(url);
@@ -39,7 +39,7 @@ class AssetLoaderClass {
     const key = `bg:${name}`;
     if (this.cache.has(key)) return this.cache.get(key)!;
     for (const ext of EXTS) {
-      const url = `/${name}.${ext}`;
+      const url = `${import.meta.env.BASE_URL}${name}.${ext}`;
       if (await probeExists(url)) {
         try {
           const tex = await Assets.load<Texture>(url);
